@@ -53,10 +53,16 @@ jobs:
           done
           ps -eo user:12,args | awk '/Runner\.(Listener|Worker)/ && !/awk/ { print "Q6_RUNNER_PROC=" $1, $2 }'
           sudo -u agent test -w /var/run/docker.sock && echo "Q6_DOCKER_SOCKET=writable" || echo "Q6_DOCKER_SOCKET=not-writable"
-          timeout 180 sudo -u agent find / \( -path /proc -o -path /sys \) -prune -o -type f -readable \
+          # Name tests come before -readable so find calls access() only on candidates.
+          set +e
+          timeout 600 sudo -u agent find / \( -path /proc -o -path /sys \) -prune -o -type f \
               \( -name '.credentials*' -o -name '.runner' -o -name '*.key' -o -name '.git-credentials' \
-                 -o -name '.netrc' -o -name 'hosts.yml' -o -path '*/.docker/config.json' \) -print 2>/dev/null \
-            | head -n 40 | sed 's/^/Q6_AGENT_READABLE=/' || true
+                 -o -name '.netrc' -o -name 'hosts.yml' -o -path '*/.docker/config.json' \) -readable -print \
+              2>/dev/null > "$RUNNER_TEMP/agent-readable.txt"
+          echo "Q6_FIND_EXIT=$?"
+          set -e
+          head -n 40 "$RUNNER_TEMP/agent-readable.txt" | sed 's/^/Q6_AGENT_READABLE=/'
+          echo "Q6_AGENT_READABLE_COUNT=$(wc -l < "$RUNNER_TEMP/agent-readable.txt")"
 
       - name: Q7 exchange the OIDC token, replay it, and call the Messages API
         run: |
