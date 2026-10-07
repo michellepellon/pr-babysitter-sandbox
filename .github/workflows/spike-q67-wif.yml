@@ -1,0 +1,113 @@
+# ABOUTME: Task 0 spike Q6 and Q7 (throwaway): the WIF chain end to end, and the endpoints Claude Code calls.
+# ABOUTME: Runs `claude -p --bare` as an unprivileged user behind a logging proxy; no token is ever printed.
+name: spike-q67-wif
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  wif:
+    runs-on: ubuntu-latest
+    environment: babysit
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+    env:
+      # Anthropic says these IDs are not secret; the federation rule is what grants access.
+      FEDERATION_RULE_ID: fdrl_019P91NZJBBY6GcG2xWPmjPh
+      ORGANIZATION_ID: 7292cca8-ad45-416c-909d-d6573972ad06
+      SERVICE_ACCOUNT_ID: svac_01BJ2pyDHLw1ZepqVY1jfNUj
+      WORKSPACE_ID: wrkspc_01LS215rVaA2338TJq5rpGeY
+      CLAUDE_CODE_VERSION: 2.1.292
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up the agent user, Claude Code, the proxy, and the firewall
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/q6proxy" ./spike/q6proxy
+          sudo install -d -o "$USER" /opt/cc
+          npm install --prefix /opt/cc --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          sudo useradd --create-home agent
+          uid=$(id -u agent)
+          sudo iptables -A OUTPUT -m owner --uid-owner "$uid" -d 127.0.0.1 -p tcp --dport 8199 -j ACCEPT
+          for t in iptables ip6tables; do
+            sudo "$t" -A OUTPUT -m owner --uid-owner "$uid" -j LOG --log-prefix "agent-blocked: "
+            sudo "$t" -A OUTPUT -m owner --uid-owner "$uid" -j REJECT
+          done
+
+      - name: Q7 exchange the OIDC token, replay it, and call the Messages API
+        run: |
+          set -euo pipefail
+          umask 077
+          exchange() {  # writes resp.json and prints the HTTP status
+            jq -n '{grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: env.JWT,
+                federation_rule_id: env.FEDERATION_RULE_ID, organization_id: env.ORGANIZATION_ID,
+                service_account_id: env.SERVICE_ACCOUNT_ID, workspace_id: env.WORKSPACE_ID}' \
+              | curl -sS -o resp.json -w '%{http_code}' https://api.anthropic.com/v1/oauth/token \
+                  -H 'content-type: application/json' --data @-
+          }
+          error_of() { jq -c '{error, request_id}' resp.json 2>/dev/null || head -c 300 resp.json; }
+
+          JWT=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | jq -r .value)
+          echo "::add-mask::$JWT"
+          export JWT
+          echo "Q7_CLAIMS=$(printf '%s' "$JWT" | jq -cR 'split(".")[1] | gsub("-";"+") | gsub("_";"/") | @base64d | fromjson | {sub, aud, environment, ref, repository_owner, job_workflow_ref}')"
+
+          code=$(exchange)
+          echo "Q7_EXCHANGE_HTTP_STATUS=$code"
+          if [ "$code" != 200 ]; then echo "Q7_EXCHANGE_ERROR=$(error_of)"; exit 1; fi
+          token=$(jq -r .access_token resp.json)
+          echo "::add-mask::$token"
+          echo "Q7_EXCHANGE=$(jq -c '{token_type, expires_in, scope, oat01: (.access_token | startswith("sk-ant-oat01-"))}' resp.json)"
+          printf '%s' "$token" > "$RUNNER_TEMP/anthropic-token"
+          printf 'authorization: Bearer %s\n' "$token" > "$RUNNER_TEMP/auth-header"
+          rm resp.json
+
+          code=$(exchange)
+          echo "Q7_REPLAY_HTTP_STATUS=$code"
+          if [ "$code" = 200 ]; then
+            echo "::add-mask::$(jq -r .access_token resp.json)"
+            echo "Q7_REPLAY=accepted"
+          else
+            echo "Q7_REPLAY_ERROR=$(error_of)"
+          fi
+          rm resp.json
+
+          code=$(jq -n '{model: "claude-haiku-4-5-20251001", max_tokens: 16,
+                messages: [{role: "user", content: "Reply with the single word OK."}]}' \
+            | curl -sS -o msg.json -w '%{http_code}' https://api.anthropic.com/v1/messages \
+                -H @"$RUNNER_TEMP/auth-header" -H 'anthropic-version: 2023-06-01' \
+                -H 'content-type: application/json' --data @-)
+          echo "Q7_MESSAGES_HTTP_STATUS=$code"
+          echo "Q7_MESSAGES=$(jq -c '{model, stop_reason, usage, error, text: [.content[]? | select(.type == "text") | .text]}' msg.json)"
+
+      - name: Q6 run Claude Code as agent behind the logging proxy
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/q6proxy" "$RUNNER_TEMP/anthropic-token" > "$RUNNER_TEMP/proxy.jsonl" 2>&1 &
+          sleep 1
+          cd /
+          sudo -u agent env -i HOME=/home/agent PATH=/opt/cc/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+            ANTHROPIC_BASE_URL=http://127.0.0.1:8199 ANTHROPIC_API_KEY=placeholder \
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+            sh -c 'cd "$HOME" && exec claude -p --bare --setting-sources user --strict-mcp-config \
+              --permission-mode bypassPermissions --max-turns 4 --max-budget-usd 1 \
+              --output-format stream-json --verbose "Run ls -a, then reply with the single word DONE."' \
+            < /dev/null > "$RUNNER_TEMP/claude.jsonl" || echo "Q6_CLAUDE_EXIT=$?"
+
+          echo "Q6_INIT=$(jq -c 'select(.type == "system" and .subtype == "init") | {claude_code_version, model, tools, mcp_servers, permissionMode, apiKeySource}' "$RUNNER_TEMP/claude.jsonl")"
+          echo "Q6_RESULT=$(jq -c 'select(.type == "result") | {subtype, is_error, num_turns, total_cost_usd, result}' "$RUNNER_TEMP/claude.jsonl")"
+          jq -c 'select(.type == "system" and .subtype == "api_retry")' "$RUNNER_TEMP/claude.jsonl" | head -n 5 | sed 's/^/Q6_RETRY=/'
+          sed 's/^/Q6_PROXY=/' "$RUNNER_TEMP/proxy.jsonl"
+          sudo dmesg | awk '/agent-blocked/ { d = p = t = ""; for (i = 1; i <= NF; i++) { if ($i ~ /^DST=/) d = $i; if ($i ~ /^PROTO=/) p = $i; if ($i ~ /^DPT=/) t = $i }; print d, p, t }' \
+            | sort | uniq -c | sed 's/^/Q6_BLOCKED=/'
