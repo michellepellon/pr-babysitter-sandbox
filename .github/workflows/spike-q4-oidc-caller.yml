@@ -1,0 +1,14 @@
+# ABOUTME: Task 0 spike Q4 (throwaway): call pr-babysitter's reusable OIDC workflow from this repo.
+# ABOUTME: Shows which repo's `babysit` environment the called job uses and which OIDC claims it gets.
+name: spike-q4-oidc-caller
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  call-oidc:
+    permissions:
+      id-token: write
+    uses: michellepellon/pr-babysitter/.github/workflows/spike-oidc.yml@spike/task0

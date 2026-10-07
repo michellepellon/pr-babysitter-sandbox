@@ -1,0 +1,11 @@
+// ABOUTME: Unit test for Add, run by the ci workflow's test job.
+// ABOUTME: It must stay green so the required "test" check passes on PRs.
+package sandbox
+
+import "testing"
+
+func TestAdd(t *testing.T) {
+	if got := Add(2, 3); got != 5 {
+		t.Fatalf("Add(2, 3) = %d, want 5", got)
+	}
+}

@@ -1,0 +1,80 @@
+# ABOUTME: Task 0 spike Q2 (throwaway): which single GITHUB_TOKEN permission can create and then edit a PR comment?
+# ABOUTME: One job holds only pull-requests: write, the other only issues: write; each POSTs a comment, then PATCHes it.
+name: spike-q2-comments
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Number of the sandbox test PR to comment on
+        required: true
+        type: number
+
+permissions: {}
+
+jobs:
+  pull-requests-write:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Create, then edit, a PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          JOB_LABEL: pull-requests-write
+        run: |
+          case "${PR_NUMBER}" in ''|*[!0-9]*) echo "pr_number must be digits"; exit 1;; esac
+          api() {
+            curl -sS -o body.json -D headers.txt -w '%{http_code}' -X "$1" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$3" "https://api.github.com$2"
+          }
+          report() {
+            echo "Q2_${1}_HTTP_STATUS=${2}"
+            grep -i '^x-accepted-github-permissions:' headers.txt | sed "s/^/Q2_${1}_HEADER=/" || true
+            echo "Q2_${1}_BODY=$(jq -c . body.json)"
+          }
+          code=$(api POST "/repos/${REPO}/issues/${PR_NUMBER}/comments" "$(jq -nc --arg b "spike-q2: created by job ${JOB_LABEL}" '{body: $b}')")
+          report POST "${code}"
+          [ "${code}" = 201 ] || exit 1
+          id=$(jq -r .id body.json)
+          code=$(api PATCH "/repos/${REPO}/issues/comments/${id}" "$(jq -nc --arg b "spike-q2: created, then edited, by job ${JOB_LABEL}" '{body: $b}')")
+          report PATCH "${code}"
+          [ "${code}" = 200 ] || exit 1
+
+  issues-write:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create, then edit, a PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          JOB_LABEL: issues-write
+        run: |
+          case "${PR_NUMBER}" in ''|*[!0-9]*) echo "pr_number must be digits"; exit 1;; esac
+          api() {
+            curl -sS -o body.json -D headers.txt -w '%{http_code}' -X "$1" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              --data "$3" "https://api.github.com$2"
+          }
+          report() {
+            echo "Q2_${1}_HTTP_STATUS=${2}"
+            grep -i '^x-accepted-github-permissions:' headers.txt | sed "s/^/Q2_${1}_HEADER=/" || true
+            echo "Q2_${1}_BODY=$(jq -c . body.json)"
+          }
+          code=$(api POST "/repos/${REPO}/issues/${PR_NUMBER}/comments" "$(jq -nc --arg b "spike-q2: created by job ${JOB_LABEL}" '{body: $b}')")
+          report POST "${code}"
+          [ "${code}" = 201 ] || exit 1
+          id=$(jq -r .id body.json)
+          code=$(api PATCH "/repos/${REPO}/issues/comments/${id}" "$(jq -nc --arg b "spike-q2: created, then edited, by job ${JOB_LABEL}" '{body: $b}')")
+          report PATCH "${code}"
+          [ "${code}" = 200 ] || exit 1
