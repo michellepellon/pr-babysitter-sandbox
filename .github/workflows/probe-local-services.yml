@@ -1,0 +1,29 @@
+# ABOUTME: Task 9 probe (throwaway): run pr-babysitter's sandbox.sh, close the network, then try local services as agent.
+# ABOUTME: Runs only on pushes to probe/ branches. No environment, no OIDC, no model calls.
+name: probe-local-services
+
+on:
+  push:
+    branches: ["probe/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: michellepellon/pr-babysitter
+          ref: 163916d0877448ac9d07f975c07d5bbdfd3fb41d
+          path: babysitter
+          persist-credentials: false
+      - run: mkdir -p "$RUNNER_TEMP/items" && sudo env PATH="$PATH" babysitter/sandbox.sh setup "$GITHUB_WORKSPACE" "$RUNNER_TEMP/items"
+      - run: sudo env PATH="$PATH" probe/local-services.sh open
+      - run: sudo babysitter/sandbox.sh close 8199
+      - run: sudo env PATH="$PATH" probe/local-services.sh closed
