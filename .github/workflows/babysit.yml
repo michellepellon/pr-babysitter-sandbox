@@ -36,7 +36,7 @@ jobs:
       test_command: go test ./... -run
       lint_command: ""
       reviewer_bots: ""
-      protected_paths: protected/
+      protected_paths: ${{ vars.E2E_PROTECTED_PATHS }} # a variable, so agent cannot read it from the repo (e2e scenario 3)
       federation_rule_id: fdrl_019P91NZJBBY6GcG2xWPmjPh
       organization_id: 7292cca8-ad45-416c-909d-d6573972ad06
       service_account_id: svac_01BJ2pyDHLw1ZepqVY1jfNUj
