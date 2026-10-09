@@ -17,7 +17,7 @@ jobs:
       pull-requests: write
       checks: read
       statuses: read
-    steps: &steps
+    steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: michellepellon/pr-babysitter
@@ -49,4 +49,28 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    steps: *steps
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: michellepellon/pr-babysitter
+          ref: 6b545300154ff4639cec3eb5459bd727f5cc8a61
+          path: babysitter
+          persist-credentials: false
+      - uses: ./babysitter
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          BABYSIT_PR: "2"
+          BABYSIT_HEAD: 890c09861ce19b0daf1a7ca869da363fce369821
+          BABYSIT_BRANCH: e2e/failing-test
+          BABYSIT_WORK_RESULT: success
+          BABYSIT_DIR: repo
+          BABYSIT_BUNDLE: /nonexistent/round.bundle
+          BABYSIT_PROOFS: /nonexistent/proofs.json
+          BABYSIT_SUMMARY: /nonexistent/summary.md
+          BABYSIT_BOT: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          BABYSIT_DRY_RUN: "true"
+        run: pr-babysitter apply 2>&1 | sed 's/^/RESULT: /' || true
