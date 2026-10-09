@@ -22,7 +22,7 @@ concurrency:
 jobs:
   babysit:
     # Pin to a full commit SHA of pr-babysitter's main branch; replace the zeros.
-    uses: michellepellon/pr-babysitter/.github/workflows/babysit.yml@6b545300154ff4639cec3eb5459bd727f5cc8a61 # wip/task9-e2e
+    uses: michellepellon/pr-babysitter/.github/workflows/babysit.yml@eaa909606bee807066e1365ba847988405c8371f # wip/task9-dollar-slash
     permissions:
       actions: read
       checks: read
