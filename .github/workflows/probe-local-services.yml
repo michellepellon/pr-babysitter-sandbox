@@ -1,36 +1,52 @@
-# ABOUTME: Task 9 probe (throwaway): does a step timeout stop a command run through pr-babysitter-sandbox run?
-# ABOUTME: Runs only on pushes to probe/ branches. No environment, no OIDC, no model calls.
+# ABOUTME: Task 9 probe (throwaway): does apply's PR re-read work without checks: read and statuses: read?
+# ABOUTME: Runs only on pushes to probe/ branches. Rewrites sandbox PR #2's status comment; no model calls.
 name: probe-local-services
 
 on:
   push:
     branches: ["probe/**"]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  probe:
+  with-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+    steps: &steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: michellepellon/pr-babysitter
-          ref: 684e236d7a834d3726a9b7c40146ed376e5f5f17
+          ref: 6b545300154ff4639cec3eb5459bd727f5cc8a61
           path: babysitter
           persist-credentials: false
       - uses: ./babysitter
-      - run: mkdir -p "$RUNNER_TEMP/items" && sudo env PATH="$PATH" pr-babysitter-sandbox setup "$GITHUB_WORKSPACE/babysitter" "$RUNNER_TEMP/items"
-      - run: sudo pr-babysitter-sandbox close 10.199.0.1:8199
-      - name: Run a long command as agent past its step timeout
-        timeout-minutes: 1
-        continue-on-error: true
-        run: |
-          cd /home/agent/repo
-          sudo env PATH="$PATH" pr-babysitter-sandbox run sh -c 'sleep 600 & exec sleep 600'
-      - name: List agent's processes left after the timeout
-        if: always()
-        run: |
-          sleep 5
-          if pgrep -u agent -a; then echo "RESULT: agent processes survived the step timeout"; else echo "RESULT: none of agent's processes survived"; fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: repo
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          BABYSIT_PR: "2"
+          BABYSIT_HEAD: 890c09861ce19b0daf1a7ca869da363fce369821
+          BABYSIT_BRANCH: e2e/failing-test
+          BABYSIT_WORK_RESULT: success
+          BABYSIT_DIR: repo
+          BABYSIT_BUNDLE: /nonexistent/round.bundle
+          BABYSIT_PROOFS: /nonexistent/proofs.json
+          BABYSIT_SUMMARY: /nonexistent/summary.md
+          BABYSIT_BOT: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          BABYSIT_DRY_RUN: "true"
+        run: pr-babysitter apply 2>&1 | sed 's/^/RESULT: /' || true
+  without-checks:
+    needs: with-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps: *steps
