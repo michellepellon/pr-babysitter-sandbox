@@ -1,5 +1,5 @@
 # ABOUTME: Sandbox caller for pr-babysitter's Task 9 runs, from examples/caller.yml.
-# ABOUTME: The federation rule ID is wrong on purpose until Michelle OKs runs that spend model budget.
+# ABOUTME: Uses the real federation rule, so rounds spend model budget (Michelle OKed Task 9 scenarios 1-3).
 
 name: babysit
 
@@ -31,13 +31,13 @@ jobs:
       pull-requests: write
       statuses: read
     with:
-      dry_run: true
+      dry_run: false
       setup_command: ""
       test_command: go test ./... -run
       lint_command: ""
       reviewer_bots: ""
-      protected_paths: ""
-      federation_rule_id: fdrl_wrong_on_purpose # no token, so no model calls (Task 9 zero-spend run)
+      protected_paths: protected/
+      federation_rule_id: fdrl_019P91NZJBBY6GcG2xWPmjPh
       organization_id: 7292cca8-ad45-416c-909d-d6573972ad06
       service_account_id: svac_01BJ2pyDHLw1ZepqVY1jfNUj
       workspace_id: wrkspc_01LS215rVaA2338TJq5rpGeY
