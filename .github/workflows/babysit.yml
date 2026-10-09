@@ -1,0 +1,43 @@
+# ABOUTME: Sandbox caller for pr-babysitter's Task 9 runs, from examples/caller.yml.
+# ABOUTME: The federation rule ID is wrong on purpose until Michelle OKs runs that spend model budget.
+
+name: babysit
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  # zizmor: ignore[dangerous-triggers] babysit.yml reads nothing from the triggering run: no artifacts, no payload.
+  workflow_run:
+    workflows: [ci] # this repo's CI workflow names
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+cache-mode: none
+
+concurrency:
+  group: babysit
+  cancel-in-progress: false
+
+jobs:
+  babysit:
+    # Pin to a full commit SHA of pr-babysitter's main branch; replace the zeros.
+    uses: michellepellon/pr-babysitter/.github/workflows/babysit.yml@6b545300154ff4639cec3eb5459bd727f5cc8a61 # wip/task9-e2e
+    permissions:
+      actions: read
+      checks: read
+      contents: write
+      id-token: write
+      pull-requests: write
+      statuses: read
+    with:
+      dry_run: true
+      setup_command: ""
+      test_command: go test ./... -run
+      lint_command: ""
+      reviewer_bots: ""
+      protected_paths: ""
+      federation_rule_id: fdrl_wrong_on_purpose # no token, so no model calls (Task 9 zero-spend run)
+      organization_id: 7292cca8-ad45-416c-909d-d6573972ad06
+      service_account_id: svac_01BJ2pyDHLw1ZepqVY1jfNUj
+      workspace_id: wrkspc_01LS215rVaA2338TJq5rpGeY
